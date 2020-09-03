@@ -5,6 +5,11 @@
 # possible completions will be listed.
 smart_completion = True
 
+# Caches completions until they have been refreshed.
+# This makes sense when loading completions is not instantaneous
+# (depends on the amount of things in the database)
+cache_completions = False
+
 # Multi-line mode allows breaking up the sql statements into multiple lines. If
 # this is set to True, then the end of the statements must have a semi-colon.
 # If this is set to False then sql statements can't be split into multiple

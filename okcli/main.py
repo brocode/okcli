@@ -42,6 +42,9 @@ from .lexer import OracleLexer
 from .packages.special.main import NO_QUERY
 from .sqlcompleter import SQLCompleter
 from .sqlexecute import SQLExecute
+from .completion_cache import (existing_completion_cache_file,
+                               completion_cache_file,
+                               completion_cache_dir)
 
 click.disable_unicode_literals_warning = True
 try:
@@ -106,6 +109,7 @@ class OCli(object):
         self.formatter = TabularOutputFormatter(
             format_name=c['main']['table_format'])
         self.syntax_style = c['main']['syntax_style']
+        self.cache_completions = c['main'].as_bool('cache_completions')
         self.cli_style = c['colors']
         self.wider_completion_menu = c['main'].as_bool('wider_completion_menu')
         c_ddl_warning = c['main'].as_bool('ddl_warning')
@@ -640,16 +644,30 @@ class OCli(object):
         if reset:
             with self._completer_lock:
                 self.completer.reset_completions()
+        status_message = 'Auto-completion refresh started in the background.'
+        if self.cache_completions:
+            maybe_cache = existing_completion_cache_file(self.sqlexecute.user, self.sqlexecute.host, self.config)
+            if maybe_cache is not None:
+              import pickle
+              status_message = "%s (using cache for now)" % status_message
+              with open(maybe_cache, 'rb') as compfile:
+                  new_completer = pickle.load(compfile)
+                  self._swap_completer_objects(new_completer)
         self.completion_refresher.refresh(
             self.sqlexecute, self._on_completions_refreshed,
             {'smart_completion': self.smart_completion,
              'supported_formats': self.formatter.supported_formats})
 
-        return [(None, None, None,
-                 'Auto-completion refresh started in the background.')]
+        return [(None, None, None, status_message)]
 
     def _on_completions_refreshed(self, new_completer):
         self._swap_completer_objects(new_completer)
+
+        if self.cache_completions:
+            import pickle
+            os.makedirs(completion_cache_dir(self.config), exist_ok=True)
+            with open(completion_cache_file(self.sqlexecute.user, self.sqlexecute.host, self.config), 'wb') as compfile:
+                pickle.dump(new_completer, compfile)
 
         if self.cli:
             # After refreshing, redraw the CLI to clear the statusbar
